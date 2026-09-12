@@ -34,6 +34,11 @@ What it looks for, and why each one matters
   6. Private terms such as variety names, loaded from a file kept OUTSIDE the
      repo. If a name from the trial appears in the code, raw data has been
      typed in by hand.
+     Two deliberate exemptions, both narrow, so that the check stays usable:
+       - Your own name, as published in CITATION.cff, does not count as your
+         username leaking. See PUBLISHED NAME below.
+       - A private term that is also an ordinary word (ALPHA, EDEN) is checked
+         case-sensitively instead of being dropped. See COMMON_WORD_TERMS.
   7. Hard-coded values that look like data: per-plot score lists, long lists of
      numbers, integer matrices, quoted plot IDs.
 """
@@ -76,6 +81,43 @@ LITERAL_PATTERNS = [
     ("integer matrix typed into the code", re.compile(r"np\.array\(\s*\[\s*\[\s*\d+\s*,")),
     ("quoted plot ID used as a filter", re.compile(r"(isin\(\s*\[\s*['\"]\d{2,}['\"]|==\s*['\"]\d{2,}['\"])")),
 ]
+
+# ---------------------------------------------------------------------------
+# PUBLISHED NAME
+# A citation file exists to publish the author's name, so the name in it is not
+# a leak. The username rule cannot tell the two apart on its own, because a
+# computer username is often a piece of the person's real name ("ada" inside
+# "Ada Lovelace"). These two files may therefore carry the author's name, and
+# ONLY where the match sits inside the name as CITATION.cff publishes it.
+# Everything else still blocks: the same username in a path, in a source file,
+# or anywhere in these files outside the published name.
+# The name itself is never written here; it is read from CITATION.cff.
+AUTHORSHIP_FILES = {"CITATION.cff", "README.md"}
+CITATION_NAME_KEYS = ("given-names", "family-names", "name")
+
+# ---------------------------------------------------------------------------
+# COMMON_WORD_TERMS
+# Ordinary English and programming words. A private term that is one of these
+# is NOT dropped -- it is matched case-sensitively instead of case-insensitively,
+# so a variety named ALPHA is still caught when ALPHA is typed into the code,
+# while `alpha=3.0` (an ordinary parameter name) no longer raises a false BLOCK.
+#
+# This is a GENERIC word list. A word appearing here says nothing about whether
+# it is a variety in any particular trial, so the list leaks nothing.
+#
+# Only applied to terms shorter than COMMON_WORD_MAX_LEN, where a collision with
+# normal code is likely and the term is too short to be distinctive. Every entry
+# is therefore 5 characters or fewer; longer words here would never be used.
+COMMON_WORD_MAX_LEN = 6
+COMMON_WORD_TERMS = {
+    # Greek letters, routinely used as parameter names
+    "alpha", "beta", "gamma", "delta", "theta", "kappa", "sigma", "omega",
+    # everyday identifiers in scientific Python
+    "axis", "data", "eos", "file", "fit", "grid", "index", "key", "label",
+    "list", "mask", "max", "mean", "min", "mode", "model", "norm", "path",
+    "plot", "rate", "raw", "row", "score", "seed", "size", "sort", "step",
+    "sum", "test", "text", "time", "train", "type", "value",
+}
 
 THIS_FILE = Path(__file__).resolve()
 
@@ -158,13 +200,82 @@ def load_terms(terms_file: str | None, tables: list[str], column: str | None) ->
 
 
 # ---------------------------------------------------------------------------
+# The author's own name, as they publish it
+# ---------------------------------------------------------------------------
+def published_author_names(root: Path) -> list[str]:
+    """Names the author deliberately publishes, read from CITATION.cff.
+
+    Returns each name part and every given+family combination, longest first,
+    so the longest published form wins when deciding whether a username match
+    sits inside a name. Returns [] when there is no readable CITATION.cff, in
+    which case nothing is exempt and the username rule behaves as it always did.
+    """
+    cff = root / "CITATION.cff"
+    if not cff.exists():
+        return []
+    try:
+        lines = cff.read_text(encoding="utf-8").splitlines()
+    except (OSError, UnicodeDecodeError):
+        return []
+
+    names: set[str] = set()
+    given: list[str] = []
+    family: list[str] = []
+    for line in lines:
+        item = line.strip().lstrip("-").strip()          # tolerate "- given-names: ..."
+        for key in CITATION_NAME_KEYS:
+            if item.lower().startswith(key + ":"):
+                value = item.split(":", 1)[1].strip().strip('"').strip("'")
+                if not value:
+                    continue
+                names.add(value)
+                if key == "given-names":
+                    given.append(value)
+                elif key == "family-names":
+                    family.append(value)
+    for g in given:
+        for f in family:
+            names.add(f"{g} {f}")
+    return sorted(names, key=len, reverse=True)
+
+
+def inside_published_name(line: str, span: tuple[int, int], names: list[str]) -> bool:
+    """True if the matched span lies wholly inside an occurrence of a published
+    name on this line. A username that merely shares the line with the author's
+    name is NOT exempt; it has to be part of the name itself."""
+    start, end = span
+    low = line.lower()
+    for name in names:
+        needle = name.lower()
+        pos = low.find(needle)
+        while pos != -1:
+            if pos <= start and end <= pos + len(needle):
+                return True
+            pos = low.find(needle, pos + 1)
+    return False
+
+
+def term_pattern(term: str) -> re.Pattern:
+    """Whole-word matcher for one private term.
+
+    Ordinary words (COMMON_WORD_TERMS) are matched case-sensitively so that the
+    variety ALPHA still blocks while `alpha=3.0` does not. Everything else stays
+    case-insensitive, so a variety name typed in any casing is still caught.
+    """
+    ordinary = len(term) < COMMON_WORD_MAX_LEN and term.casefold() in COMMON_WORD_TERMS
+    flags = 0 if ordinary else re.I
+    return re.compile(r"(?<!\w)" + re.escape(term) + r"(?!\w)", flags)
+
+
+# ---------------------------------------------------------------------------
 # The checks
 # ---------------------------------------------------------------------------
 def scan(files: list[Path], root: Path, terms: set[str], history: set[str]) -> list[Finding]:
     findings: list[Finding] = []
     user = getpass.getuser()
     user_pat = re.compile(re.escape(user), re.I) if len(user) >= 3 and user not in {"root", "user"} else None
-    term_pats = [(t, re.compile(r"(?<!\w)" + re.escape(t) + r"(?!\w)", re.I)) for t in sorted(terms)]
+    term_pats = [(t, term_pattern(t)) for t in sorted(terms)]
+    author_names = published_author_names(root)
 
     for f in sorted(set(files)):
         if not f.exists() or f.resolve() == THIS_FILE:
@@ -214,8 +325,14 @@ def scan(files: list[Path], root: Path, terms: set[str], history: set[str]) -> l
                     findings.append(Finding("BLOCK", "personal absolute path", loc, snippet))
                     break
             else:
-                if user_pat and user_pat.search(line):
-                    findings.append(Finding("BLOCK", "your computer username appears", loc, snippet))
+                if user_pat:
+                    # The author's published name is not a leaked username.
+                    may_be_name = str(rel) in AUTHORSHIP_FILES and bool(author_names)
+                    for m in user_pat.finditer(line):
+                        if may_be_name and inside_published_name(line, m.span(), author_names):
+                            continue
+                        findings.append(Finding("BLOCK", "your computer username appears", loc, snippet))
+                        break
             for term, pat in term_pats:
                 if pat.search(line):
                     findings.append(Finding("BLOCK", "private term (from your terms list)", loc, f"'{term}' in: {snippet}"))
@@ -280,7 +397,35 @@ def self_test() -> int:
             "df = pd.read_csv(DATA_DIR / 'processed' / 'A2_clean_tex_norm.csv')\n"
             "cv = StratifiedGroupKFold(n_splits=5, shuffle=True, random_state=RANDOM_SEED)\n"
         )
-        found = scan(walk_files(tmp), tmp, {"Zorbatato"}, set())
+
+        # --- the author's published name vs a genuinely leaked username ------
+        # Built from the live username so this file never contains a real one.
+        user = getpass.getuser()
+        pretty = user.capitalize()
+        (tmp / "CITATION.cff").write_text(
+            "cff-version: 1.2.0\n"
+            "authors:\n"
+            f'  - given-names: "{pretty}"\n'
+            '    family-names: "Testsurname"\n'
+        )
+        (tmp / "README.md").write_text(
+            "## Contact\n"
+            f"{pretty} Testsurname\n"                  # published name: allowed
+            f"Clone it to /Users/{user}/Desktop/repo\n"  # real path leak: blocked
+        )
+        (tmp / "notes.py").write_text(f'CACHE = "/tmp/{user}-cache"\n')  # blocked
+
+        # --- a private term that is also an ordinary word --------------------
+        # DELTA stands in for any such term. It is matched case-sensitively:
+        # the exact-case name blocks, the lowercase parameter name does not.
+        (tmp / "params.py").write_text(
+            "model = Ridge(delta=3.0)\n"    # ordinary parameter name: allowed
+            'GROUP = "DELTA"\n'             # the term itself, exact case: blocked
+        )
+        # and a term that is NOT an ordinary word stays case-insensitive
+        (tmp / "mixedcase.py").write_text("note = 'zorbatato had the worst plots'\n")
+
+        found = scan(walk_files(tmp), tmp, {"Zorbatato", "DELTA"}, set())
 
         def hit(level, rule_part, where_part):
             return any(x.level == level and rule_part in x.rule and where_part in x.where for x in found)
@@ -296,6 +441,24 @@ def self_test() -> int:
             ("quoted plot ID flagged", hit("REVIEW", "plot ID", "leaky.py:4")),
             ("long number list flagged", hit("REVIEW", "long list", "leaky.py:5")),
             ("clean file NOT flagged", not any("clean.py" in x.where for x in found)),
+
+            # (1) published author name vs leaked username
+            ("author name in CITATION.cff not called a username",
+             not hit("BLOCK", "username", "CITATION.cff")),
+            ("author name in README authorship line not called a username",
+             not hit("BLOCK", "username", "README.md:2")),
+            ("personal path in README STILL blocked",
+             hit("BLOCK", "personal absolute path", "README.md:3")),
+            ("username outside an author name STILL blocked",
+             hit("BLOCK", "your computer username appears", "notes.py:1")),
+
+            # (2) ordinary-word private terms
+            ("ordinary word not flagged as a private term",
+             not any("params.py:1" in x.where and "private term" in x.rule for x in found)),
+            ("private term in its exact case STILL blocked",
+             hit("BLOCK", "private term", "params.py:2")),
+            ("non-ordinary term STILL matched case-insensitively",
+             hit("BLOCK", "private term", "mixedcase.py:1")),
         ]
         print("SELF-TEST")
         for name, ok in checks:

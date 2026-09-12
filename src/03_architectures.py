@@ -89,11 +89,6 @@ F7 = LOW_VIF + TEX_N                       # the locked seven
 F6_UNWEIGHTED = ["canopy_cover_mean", "NDVI_mean", "NDRE_mean",
                  "GNDVI_mean", "EVI2_mean", "OSAVI_mean"]
 
-# mord.LogisticAT's first positional argument is its L2 regularisation strength.
-# It is passed positionally, and named here, only because the keyword spelling
-# collides with a variety name and trips tools/check_for_leaks.py.
-ORDINAL_REGULARISATION = 3.0
-
 LO = ["diseased", "moderate", "healthy"]   # label order for every matrix and metric
 ORD = {"diseased": 0, "moderate": 1, "healthy": 2}
 INV_ORD = {v: k for k, v in ORD.items()}
@@ -178,7 +173,7 @@ def single_stage(Xtr, ytr, Xte, make):
 
 def ordinal(Xtr, ytr, Xte):
     """Ordinal regression on integer-coded severity, decoded back to labels."""
-    m = mord.LogisticAT(ORDINAL_REGULARISATION).fit(Xtr, np.array([ORD[l] for l in ytr]))
+    m = mord.LogisticAT(alpha=3.0).fit(Xtr, np.array([ORD[l] for l in ytr]))
     return np.array([INV_ORD[v] for v in m.predict(Xte)])
 
 
