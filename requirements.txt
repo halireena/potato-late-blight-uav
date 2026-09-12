@@ -1,0 +1,18 @@
+# Exact versions from the local environment that produced the thesis results
+# (Python 3.9.6, macOS arm64). Install with:  pip install -r requirements.txt
+#
+# Texture extraction ran separately on the BlueBEAR HPC cluster and is not
+# part of this environment. TODO: add its versions once confirmed with
+# `module list` on BlueBEAR.
+
+numpy==2.0.2
+pandas==2.3.3
+scipy==1.13.1
+scikit-learn==1.6.1
+xgboost==2.1.4
+mord==0.7
+imbalanced-learn==0.12.4
+statsmodels==0.14.6
+matplotlib==3.9.4
+openpyxl==3.1.5
+joblib==1.5.3

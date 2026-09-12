@@ -1,0 +1,78 @@
+# =====================================================================
+#  .gitignore  —  keeps the trial data OUT of GitHub
+#  Rule of thumb: code goes up, anything made FROM the data stays home.
+#  NOTE: .gitignore only stops NEW files. If a file was already
+#  committed, ignoring it now does NOT remove it from history.
+# =====================================================================
+
+# ---- 1. The data folder: only its README and placeholder go up ----
+data/*
+!data/README.md
+!data/.gitkeep
+
+# ---- 2. Data file types, wherever they are in the repo ----
+*.csv
+*.tsv
+*.xlsx
+*.xls
+*.parquet
+*.feather
+*.pkl
+*.pickle
+*.joblib
+*.npy
+*.npz
+*.h5
+*.hdf5
+*.json
+*.sqlite
+*.db
+
+# ---- 3. Geospatial / imagery (plots, orthomosaics, QGIS projects) ----
+*.tif
+*.tiff
+*.gpkg
+*.shp
+*.shx
+*.dbf
+*.prj
+*.cpg
+*.qgz
+*.qgs
+
+# ---- 4. Outputs and figures (figures are drawn from real plot data) ----
+figures/*
+!figures/.gitkeep
+outputs/*
+!outputs/.gitkeep
+*.png
+*.jpg
+*.jpeg
+*.svg
+*.pdf
+
+# ---- 5. Notebooks and HTML exports (their saved outputs contain data) ----
+*.ipynb
+.ipynb_checkpoints/
+*.html
+
+# ---- 6. Private files that must never go up ----
+private_terms.txt
+leak_audit*
+
+# ---- 7. Python / editor / OS clutter ----
+__pycache__/
+*.pyc
+.venv/
+venv/
+env/
+.env
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+*.log
+
+# ---- 8. Local handover notes (contain absolute paths to the data folder) ----
+HANDOVER.md
+HANDOVER_report.txt

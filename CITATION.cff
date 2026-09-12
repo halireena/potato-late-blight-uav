@@ -1,0 +1,10 @@
+cff-version: 1.2.0
+message: "If you use this code, please cite it as below."
+title: "TODO: thesis title"
+type: software
+authors:
+  - family-names: "Mohomed"
+    given-names: "Halireena Rushdiha"
+    affiliation: "University of Birmingham Dubai"
+repository-code: "https://github.com/TODO-username/TODO-repo"
+license: "TODO: e.g. MIT"
