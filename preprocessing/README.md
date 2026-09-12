@@ -44,33 +44,67 @@ supervisor, not as a resolved decision.
 
 | File | What it is |
 |---|---|
-| `01_preprocessing.sh` | steps 2 and 3, exactly as written and as run |
-| `02_metadata.py` | step 11, exactly as written |
+| `01_preprocessing.sh` | steps 2 and 3, as run. **Redacted** — see below |
+| `02_metadata.py` | step 11, as written. **Redacted** — see below |
 | `02_metadata_any_flight.py` | step 11, rewritten to take the flight number as an argument. **Not the script that was run** — see step 11 |
-| `potato_pipeline.qgz` | the QGIS project carrying steps 1 and 6 to 15 |
-| `16_texture_extraction_bluebear.ipynb` | step 16, the texture extraction run on BlueBEAR. **Outputs cleared** |
+| `potato_pipeline.qgz` | the QGIS project carrying steps 1 and 6 to 15. **Redacted, and NOT committed** — see below |
+| `16_texture_extraction_bluebear.ipynb` | step 16, the texture extraction run on BlueBEAR. **Outputs cleared, paths redacted** |
 
-### Four of those files are present here but NOT committed
+### Four of these files are REDACTED and are therefore not what ran
 
-`01_preprocessing.sh`, `02_metadata.py`, `potato_pipeline.qgz` and
-`16_texture_extraction_bluebear.ipynb` are on disk in this folder, exactly as written, but they
-are git-ignored and are **not** in any commit. They each contain identifying strings that have
-not been cleared for publication:
+**`01_preprocessing.sh`, `02_metadata.py`, `potato_pipeline.qgz` and
+`16_texture_extraction_bluebear.ipynb` as committed here are NOT byte-identical to the files that
+produced the data.** Each carried identifying strings that cannot be published, and those strings
+have been replaced with clearly marked placeholders. Nothing else was touched: no logic, no
+parameter, no threshold, no ordering. The unredacted originals are kept outside this repository
+and are the authoritative record of what ran.
 
-| File | What is in it |
+| Placeholder | What it stands for |
 |---|---|
-| `01_preprocessing.sh` | cluster paths under `/rds/projects/...`, a workspace folder named after the author, the author's university username in the header |
-| `02_metadata.py` | the same cluster path and workspace folder |
-| `potato_pipeline.qgz` | the same, many times over, plus one absolute path to a results CSV |
-| `16_texture_extraction_bluebear.ipynb` | cluster paths under `/rds/projects/...` and `/rds/homes/...`, including the author's home directory |
+| `__REDACTED_CLUSTER_PROJECT__` | the absolute path to the shared cluster project directory |
+| `__REDACTED_WORKSPACE__` | the author's working directory inside it |
+| `__REDACTED_CLUSTER_HOME__` | the author's cluster home directory |
+| `__REDACTED_USERNAME__` | the author's university username |
+| `__REDACTED_SUPERVISOR__` | a supervisor's username, which appears inside the project directory name |
+| `__REDACTED_NAME__` | the author's name where it appeared in a path |
 
-The strings are the project name (which contains a supervisor's username), the author's
-university username, and a workspace directory named after the author. None of it is trial data,
-and none of it is secret in the way the field data is, but all of it is identifying and all of it
-would become public with the repository. Redacting it means editing files whose value is that
-they are exactly what was run, so that is a decision for the author, not an automatic cleanup.
+What this means in practice:
 
-`README.md` and `02_metadata_any_flight.py` contain none of it and are committed normally.
+- **None of these scripts will run as committed.** They could not run here anyway, for the
+  reasons at the top of this file, but the placeholders make that unambiguous rather than
+  leaving someone to discover it when a path fails.
+- **The QGIS project will open but its layers will not resolve**, because the redaction also
+  rewrote the layer identifiers QGIS derives from file paths. It is committed to document the
+  processing chain, not to be opened and used.
+- **Line counts, ordering and every parameter are unchanged**, so the files remain accurate as a
+  record of method even though they are inaccurate as a record of bytes.
+
+`README.md` and `02_metadata_any_flight.py` contained none of these strings and are committed
+unmodified.
+
+### `potato_pipeline.qgz` is redacted but still NOT committed
+
+Redacting the paths dealt with the usernames. It did not deal with what else a QGIS project
+records. The file stores the map extent of the trial:
+
+```
+<extent>
+  <xmin>-1.908...</xmin>  <ymin>54.987...</ymin>
+  <xmax>-1.906...</xmax>  <ymax>54.988...</ymax>
+</extent>
+```
+
+That is a box roughly 200 m by 130 m, in WGS 84, which locates the field site to within a few
+metres. It is in the project whether or not any layer resolves, and it cannot be redacted the way
+a file path can without making the project meaningless.
+
+The file carries **no trial measurements** — every one of its 50 layers is a `gdal` reference to
+an external raster and there are no embedded or memory layers, so no disease score, plot value or
+variety name is inside it. The exposure is the location of the trial, not its contents.
+
+Publishing the site's coordinates is a decision about the trial, not about the author, so it
+belongs to the data owner rather than to a cleanup pass. Until it is settled the file stays in
+this folder, redacted, and git-ignored. `.gitignore` carries the one line that reverses that.
 
 
 ## The numbered steps, from the lab notebook

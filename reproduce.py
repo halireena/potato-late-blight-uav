@@ -10,9 +10,23 @@ What it does, in order
 2. Inputs. Checks every raw input file is present before anything runs.
 3. Pipeline. Runs every script in src/ in numbered order. Each script ends with
    its own sanity check against numbers printed in the original notebook.
+
+   A failing script does NOT stop the ones after it. Only real dependencies are
+   honoured: 01 writes data/processed/, which every later script reads, so if 01
+   fails the rest cannot run and are marked SKIPPED. Scripts 02 onwards each read
+   those tables and none reads another's output, so one of them failing says
+   nothing about the others and must not silence them. Every script's result is
+   reported on its own.
 4. Verdict. Collects every check into one answer, REPRODUCED or NOT REPRODUCED,
    and saves a report to outputs/reproducibility_report.txt, stamped with the
-   date, the exact code version (git commit) and the environment.
+   date, the exact code version (git commit) and the environment. NOT REPRODUCED
+   still lists which scripts passed, because "one number is wrong" and "nothing
+   works" are different situations and the report should not blur them.
+
+The report also carries a separate, clearly fenced DIAGNOSTICS section for output
+that has NO authorised value behind it and is therefore not checked against
+anything. Those numbers are pointers for investigation, not results, and the
+section exists so they cannot be mistaken for checked figures.
 
 Exit code 0 = reproduced, 1 = not reproduced.
 """
@@ -46,6 +60,36 @@ OPTIONAL_INPUTS = [
     "sharma_SNP_positions.xlsx",      # SNP marker positions; LD pruning and both fusion tests
 ]
 LINE = "=" * 70
+
+# 01 writes data/processed/, which every later script reads. That is the only
+# real dependency in the pipeline: 02 to 07 each read those tables and none
+# reads another's output. So a failure in 02 must not stop 03 from running.
+BUILDS_PROCESSED = "01_build_plot_table.py"
+
+# Scripts whose output is diagnostic: they check nothing, because no authorised
+# value exists for anything they print. Reported separately so their numbers are
+# never read as verified.
+DIAGNOSTIC_SCRIPTS = {"07_selection_leakage_check.py"}
+
+# Blocks inside otherwise-checked scripts that are deliberately NOT checked,
+# for the same reason. Listed by hand so the report names them exactly.
+UNVERIFIED_BLOCKS = [
+    ("07_selection_leakage_check.py", "every number it prints",
+     "the leak-free texture selection, and the cascade refitted with leak-free "
+     "features and with no texture at all"),
+    ("05_supporting_statistics.py", "prevalence-shift resampling, schemes A and B",
+     "two recorded values exist (0.293 and 0.370) and the scheme is not what "
+     "separates them"),
+    ("04_permutation_tests.py", "ordinal regression, within-flight permutation test",
+     "two real scores are on record for it (0.295 and 0.308)"),
+    ("03_architectures.py", "MLP cascade, and the ordinal within-flight macro-F1",
+     "no authorised value was supplied for either"),
+]
+
+
+def prerequisites(script_name):
+    """Scripts that must have PASSED before this one can run."""
+    return [] if script_name == BUILDS_PROCESSED else [BUILDS_PROCESSED]
 
 
 def check_environment():
@@ -119,23 +163,80 @@ def main():
 
     # 3. Pipeline
     all_ok, all_bad = [], []
+    results = {}                      # script name -> how it went
+    verified_sections, diagnostic_sections = [], []
     if not missing:
         scripts = sorted((ROOT / "src").glob("[0-9][0-9]_*.py"))
         for i, script in enumerate(scripts, start=1):
-            print(f"Step 3/3  Running {script.name} ({i} of {len(scripts)})...")
+            name = script.name
+            blocked = [d for d in prerequisites(name)
+                       if results.get(d, {}).get("status") != "PASSED"]
+            if blocked:
+                # Only skip when something this script genuinely needs did not pass.
+                results[name] = {"status": "SKIPPED", "code": None, "ok": 0, "bad": [],
+                                 "why": "needs " + ", ".join(blocked)}
+                print(f"Step 3/3  Skipping {name} ({i} of {len(scripts)}): "
+                      + results[name]["why"])
+                continue
+
+            print(f"Step 3/3  Running {name} ({i} of {len(scripts)})...")
             code, output = run_script(script)
             ok, bad = parse_checks(output)
-            all_ok += ok
-            all_bad += bad
-            report += [LINE, f"{script.name}  (exit code {code})", LINE, output.rstrip(), ""]
+            diagnostic = name in DIAGNOSTIC_SCRIPTS
+            if not diagnostic:
+                all_ok += ok
+                all_bad += bad
+            status = "PASSED" if code == 0 and not bad else "FAILED"
+            results[name] = {"status": status, "code": code, "ok": len(ok), "bad": bad,
+                             "why": "", "diagnostic": diagnostic}
+
+            section = [LINE, f"{name}  (exit code {code}, {status})", LINE, output.rstrip(), ""]
+            (diagnostic_sections if diagnostic else verified_sections).extend(section)
+
             if "DIFFERS" in output:
-                failures.append(f"{script.name}: rebuilt table differs from the existing processed table")
+                failures.append(f"{name}: rebuilt table differs from the existing processed table")
             if code != 0:
-                failures.append(f"{script.name}: stopped with exit code {code}")
-                break                      # later scripts depend on this one
+                failures.append(f"{name}: stopped with exit code {code}")
+
+    # Per-script results, so one failure cannot be read as everything failing
+    if results:
+        report += [LINE, "SCRIPT RESULTS", LINE]
+        width = max(len(n) for n in results)
+        for name, r in results.items():
+            tag = " (diagnostic, checks nothing)" if r.get("diagnostic") else ""
+            detail = (r["why"] if r["status"] == "SKIPPED"
+                      else f"{r['ok']} check(s) matched"
+                           + (f", {len(r['bad'])} did not" if r["bad"] else ""))
+            report.append(f"  [{r['status']:7s}] {name:{width}s}  {detail}{tag}")
+        report.append("")
+    report += verified_sections
 
     if all_bad:
         failures.append(f"{len(all_bad)} sanity check(s) did not match")
+    skipped_scripts = [n for n, r in results.items() if r["status"] == "SKIPPED"]
+    if skipped_scripts:
+        failures.append("script(s) not run because a prerequisite failed: "
+                        + ", ".join(skipped_scripts))
+
+    # Diagnostics, fenced off from everything that is actually checked
+    fence = "#" * 70
+    report += [fence,
+               "DIAGNOSTICS - NOT CHECKED AGAINST ANYTHING",
+               fence,
+               "Everything in this section is UNVERIFIED. No authorised value exists for any",
+               "number below, so nothing here has been compared with the thesis and nothing",
+               "here contributes to the verdict. These are pointers for investigation, not",
+               "results, and they must not be quoted as if they had been checked.",
+               ""]
+    report.append("Blocks that are deliberately printed without a check:")
+    for script, what, why in UNVERIFIED_BLOCKS:
+        report.append(f"  - {script}: {what}")
+        report.append(f"      because {why}")
+    report.append("")
+    if diagnostic_sections:
+        report += ["Full output of the diagnostic-only script(s):", ""] + diagnostic_sections
+    else:
+        report += ["No diagnostic-only script ran.", ""]
 
     # Verdict
     reproduced = not failures and len(all_ok) > 0
@@ -147,6 +248,20 @@ def main():
         verdict.append(f"  - {f}")
     for b in all_bad:
         verdict.append(f"    {b}")
+    if not reproduced and results:
+        passed = [n for n, r in results.items() if r["status"] == "PASSED"]
+        verdict.append("")
+        verdict.append(f"  {len(all_ok)} check(s) DID match. Scripts that passed in full "
+                       f"({len(passed)} of {len(results)}):")
+        for n in passed:
+            tag = "  (diagnostic, checks nothing)" if results[n].get("diagnostic") else ""
+            verdict.append(f"    [PASSED] {n}{tag}")
+        for n, r in results.items():
+            if r["status"] == "FAILED":
+                verdict.append(f"    [FAILED] {n}: {len(r['bad'])} check(s) did not match"
+                               if r["bad"] else f"    [FAILED] {n}: exit code {r['code']}")
+            elif r["status"] == "SKIPPED":
+                verdict.append(f"    [SKIPPED] {n}: {r['why']}")
     if env_problems:
         verdict.append("")
         verdict.append("Environment differs from requirements.txt"

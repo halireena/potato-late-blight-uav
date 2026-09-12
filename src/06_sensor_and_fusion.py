@@ -52,6 +52,14 @@ here needs editing. Everything that does not need positions still runs.
 Every expected value was printed by an executed cell of the thesis notebook
 (mine_ML.ipynb, and 05_genomic_fusion.ipynb for the QC counts) and was supplied
 as authorised. The script exits with code 1 on any mismatch.
+
+One of them was corrected after this script first ran. The imagery-alone
+variety-level AUC on the fusable subset is 0.618 (cells 187 and 200), not the
+0.615 that appears beside the early-fusion result in the notebook: 0.615 is the
+figure for all 284 varieties (cell 172), and early fusion is computed on 210.
+The author verified both cells before the expected value here was changed. It
+matters because the like-for-like comparison is 0.618 against early fusion's
+0.617, so fusion sits marginally behind imagery alone rather than ahead of it.
 """
 import re
 import sys
@@ -300,8 +308,17 @@ def main():
         print(f"\n   Imagery alone, variety level   n = {len(y_fus)} varieties,"
               f" {int(y_fus.sum())} affected")
         print(f"     AUC = {auc_img:.3f}")
+        # 0.618, not 0.615. The two are different quantities and get confused:
+        #   0.615 is imagery alone over ALL 284 varieties          (cell 172)
+        #   0.618 is imagery alone over the 210 FUSABLE varieties  (cells 187, 200)
+        # Only the 210-variety figure is comparable with early fusion, which is also
+        # computed on those 210. So the like-for-like pair is 0.618 against 0.617,
+        # i.e. fusion marginally BEHIND imagery alone, not ahead of it. Quoting 0.615
+        # here compares 210 varieties against 284 and reverses the sign of the result.
+        # The 284-variety 0.615 is checked in its proper place, in
+        # src/04_permutation_tests.py, where it is the variety-level within-flight AUC.
         checks.append(("Imagery alone, 210-variety fusable subset, AUC",
-                       float(round(auc_img, 3)), 0.615))
+                       float(round(auc_img, 3)), 0.618))
         record.append({"statistic": "imagery-alone variety AUC (fusable)",
                        "n": len(y_fus), "value": float(round(auc_img, 3))})
 

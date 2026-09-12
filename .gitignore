@@ -77,12 +77,14 @@ Thumbs.db
 HANDOVER.md
 HANDOVER_report.txt
 
-# ---- 9. preprocessing/ artefacts held back pending a redaction decision ----
-# These are on disk, exactly as written, but carry cluster paths, the author's
-# university username and a workspace folder named after the author. Publishing
-# them would publish those. Delete the four lines below once the strings are
-# cleared or redacted. See preprocessing/README.md.
-preprocessing/01_preprocessing.sh
-preprocessing/02_metadata.py
-preprocessing/potato_pipeline.qgz
-preprocessing/16_texture_extraction_bluebear.ipynb
+# ---- 9. preprocessing/ artefacts, redacted copies, deliberately tracked ----
+# Sections 3 and 5 above ignore *.qgz and *.ipynb everywhere. These two are
+# wanted in the repo, so they are re-included here. The committed copies are
+# REDACTED (cluster paths and usernames replaced with __REDACTED_*__ markers);
+# the unredacted originals live outside the repo. See preprocessing/README.md.
+!preprocessing/16_texture_extraction_bluebear.ipynb
+# potato_pipeline.qgz stays ignored. Redacting its paths did not make it safe:
+# the project file records the trial's map extent, which pins the field site to
+# within a few metres. That is a disclosure decision about the trial, not about
+# the author, so it needs the data owner's call. Add
+# "!preprocessing/potato_pipeline.qgz" here once that is settled.
