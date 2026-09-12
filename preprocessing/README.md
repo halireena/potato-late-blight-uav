@@ -47,7 +47,7 @@ supervisor, not as a resolved decision.
 | `01_preprocessing.sh` | steps 2 and 3, as run. **Redacted** — see below |
 | `02_metadata.py` | step 11, as written. **Redacted** — see below |
 | `02_metadata_any_flight.py` | step 11, rewritten to take the flight number as an argument. **Not the script that was run** — see step 11 |
-| `potato_pipeline.qgz` | the QGIS project carrying steps 1 and 6 to 15. **Redacted, and NOT committed** — see below |
+| `potato_pipeline.qgz` | the QGIS project carrying steps 1 and 6 to 15. **Not in this repository — available on request**, see below |
 | `16_texture_extraction_bluebear.ipynb` | step 16, the texture extraction run on BlueBEAR. **Outputs cleared, paths redacted** |
 
 ### Four of these files are REDACTED and are therefore not what ran
@@ -82,6 +82,15 @@ What this means in practice:
 `README.md` and `02_metadata_any_flight.py` contained none of these strings and are committed
 unmodified.
 
+### The debug cells in the notebook are kept deliberately
+
+The leak scanner raises two REVIEW items against
+`16_texture_extraction_bluebear.ipynb`, both on debug cells that filter to a single plot by
+its ID while checking that the freshly extracted pixel statistics line up with the existing zonal
+statistics for the same plot. A single plot ID in a debug cell is not a data leak, and the cells are part of how the
+extraction was verified. They stay as they were run. REVIEW items are for reading, not for
+automatic fixing, and this is one that was read and accepted.
+
 ### `potato_pipeline.qgz` is redacted but still NOT committed
 
 Redacting the paths dealt with the usernames. It did not deal with what else a QGIS project
@@ -102,9 +111,18 @@ The file carries **no trial measurements** — every one of its 50 layers is a `
 an external raster and there are no embedded or memory layers, so no disease score, plot value or
 variety name is inside it. The exposure is the location of the trial, not its contents.
 
-Publishing the site's coordinates is a decision about the trial, not about the author, so it
-belongs to the data owner rather than to a cleanup pass. Until it is settled the file stays in
-this folder, redacted, and git-ignored. `.gitignore` carries the one line that reverses that.
+Publishing the site's coordinates is a disclosure about the trial rather than about the author,
+and it is not something the repository needs: **code availability does not require the project
+file.** Everything the project did is described in the step table above — the layers it builds,
+the thresholds it applies, the order it applies them in — and that description is what makes the
+method reproducible for anyone who has the imagery.
+
+**The QGIS project is therefore not included in this repository. It is available on request**,
+alongside the imagery itself, under the same access conditions as the rest of the trial data. See
+[Data availability](../README.md#data-availability) in the top-level README.
+
+It is listed explicitly in `.gitignore`, not merely covered by the blanket `*.qgz` rule, so that
+relaxing that rule later cannot quietly pull it in.
 
 
 ## The numbered steps, from the lab notebook

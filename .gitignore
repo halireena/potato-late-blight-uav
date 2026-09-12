@@ -83,8 +83,11 @@ HANDOVER_report.txt
 # REDACTED (cluster paths and usernames replaced with __REDACTED_*__ markers);
 # the unredacted originals live outside the repo. See preprocessing/README.md.
 !preprocessing/16_texture_extraction_bluebear.ipynb
-# potato_pipeline.qgz stays ignored. Redacting its paths did not make it safe:
-# the project file records the trial's map extent, which pins the field site to
-# within a few metres. That is a disclosure decision about the trial, not about
-# the author, so it needs the data owner's call. Add
-# "!preprocessing/potato_pipeline.qgz" here once that is settled.
+
+# The QGIS project is NEVER committed. Redacting its file paths dealt with the
+# usernames but not with the map extent it records, which locates the field site
+# to within a few metres. That is a disclosure about the trial rather than about
+# the author, and it is not needed for code availability. Listed explicitly as
+# well as by the *.qgz rule above, so that re-including *.qgz some day does not
+# quietly bring this file with it. Available on request instead.
+preprocessing/potato_pipeline.qgz
