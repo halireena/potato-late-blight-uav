@@ -30,6 +30,7 @@ MSc Bioinformatics thesis code, University of Birmingham Dubai. <!-- TODO: year 
 | `src/01_build_plot_table.py` | joins zonal statistics, disease scores, varieties and texture into one table per flight | `data/` | `data/processed/` |
 | `src/02_locked_model.py` | two-stage linear SVM cascade: grouped cross-validation on the training flight, then the temporally independent test flight | `data/processed/` | `outputs/` |
 | `src/03_architectures.py` | the rejected comparator architectures, each run within-flight and on the test flight, against the majority-class floor | `data/processed/` | `outputs/` |
+| `src/04_permutation_tests.py` | permutation tests: recomputes each headline result 1,000 times on shuffled labels to see what noise alone produces (slow, ~15 min) | `data/processed/`, `data/` | `outputs/` |
 
 Each script ends with a sanity check that compares its results with the values printed in the original
 analysis notebook, and exits with an error on any mismatch.

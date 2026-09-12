@@ -26,6 +26,12 @@ share one cross-validation group. Kept here rather than in the code so no variet
 **Texture statistics per plot**: `texture_features_selected.csv`.
 Columns `Disease_Plot_ID`, `NIR_<flight>_max`, `RedEdge_<flight>_p90`, `Red_<flight>_min` for flights 1 and 2.
 
+**Full texture statistics per plot**: `texture_features_percentiles.csv`.
+Columns `Disease_Plot_ID` then `<band>_<flight>_<stat>` for every combination of
+band (Green, Red, RedEdge, NIR), flight (1, 2) and stat (p10, p90, std, min, max) — 40 feature columns.
+Read only by `src/04_permutation_tests.py`, for the variety-level tests, which average
+these statistics over each variety's plots.
+
 ## Created by the pipeline
 
 `processed/A2_clean_tex_norm.csv` (Flight 2, training) and `processed/A1_clean_tex_norm.csv` (Flight 1, test):

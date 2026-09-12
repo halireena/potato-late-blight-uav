@@ -36,6 +36,7 @@ RAW_INPUTS = [
     "variety_and_plot_IDs.xlsx",
     "variety_spelling_fixes.csv",
     "texture_features_selected.csv",
+    "texture_features_percentiles.csv",
 ]
 LINE = "=" * 70
 
