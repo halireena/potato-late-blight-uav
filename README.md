@@ -31,6 +31,8 @@ MSc Bioinformatics thesis code, University of Birmingham Dubai. <!-- TODO: year 
 | `src/02_locked_model.py` | two-stage linear SVM cascade: grouped cross-validation on the training flight, then the temporally independent test flight | `data/processed/` | `outputs/` |
 | `src/03_architectures.py` | the rejected comparator architectures, each run within-flight and on the test flight, against the majority-class floor | `data/processed/` | `outputs/` |
 | `src/04_permutation_tests.py` | permutation tests: recomputes each headline result 1,000 times on shuffled labels to see what noise alone produces (slow, ~15 min) | `data/processed/`, `data/` | `outputs/` |
+| `src/05_supporting_statistics.py` | supporting statistics: collinearity, label reliability, spatial structure, the moderate-class screen, binary vs three-class, per-flight normalisation | `data/processed/`, `data/` | `outputs/` |
+| `src/06_sensor_and_fusion.py` | RGB versus multispectral sensors over 30 paired seeds, and whether SNP genotypes add anything to the imagery | `data/processed/`, `data/` | `outputs/` |
 
 Each script ends with a sanity check that compares its results with the values printed in the original
 analysis notebook, and exits with an error on any mismatch.

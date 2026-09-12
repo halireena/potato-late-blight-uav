@@ -37,6 +37,13 @@ RAW_INPUTS = [
     "variety_spelling_fixes.csv",
     "texture_features_selected.csv",
     "texture_features_percentiles.csv",
+    "sharma_genotype_reduced_recoded_NA.csv",
+]
+# Inputs that unlock extra statistics but are not required. A missing one is
+# reported, and the script that needs it skips only the statistics that use it;
+# it never fails the run and is never substituted with another file.
+OPTIONAL_INPUTS = [
+    "sharma_SNP_positions.xlsx",      # SNP marker positions; LD pruning and both fusion tests
 ]
 LINE = "=" * 70
 
@@ -103,7 +110,10 @@ def main():
     # 2. Inputs
     print("Step 2/3  Checking input files...")
     missing = [f for f in RAW_INPUTS if not (DATA_DIR / f).exists()]
-    report += ["INPUT FILES"] + [f"  [{'MISSING' if f in missing else 'OK'}] {f}" for f in RAW_INPUTS] + [""]
+    report += ["INPUT FILES"] + [f"  [{'MISSING' if f in missing else 'OK'}] {f}" for f in RAW_INPUTS]
+    absent_optional = [f for f in OPTIONAL_INPUTS if not (DATA_DIR / f).exists()]
+    report += ["OPTIONAL INPUTS (absence skips statistics, it does not fail the run)"]
+    report += [f"  [{'ABSENT' if f in absent_optional else 'OK'}] {f}" for f in OPTIONAL_INPUTS] + [""]
     if missing:
         failures.append(f"missing input files: {', '.join(missing)} (see data/README.md)")
 

@@ -32,6 +32,16 @@ band (Green, Red, RedEdge, NIR), flight (1, 2) and stat (p10, p90, std, min, max
 Read only by `src/04_permutation_tests.py`, for the variety-level tests, which average
 these statistics over each variety's plots.
 
+**Genotype panel**: `sharma_genotype_reduced_recoded_NA.csv`.
+One row per variety, column `Variety.name` then one column per SNP marker holding a tetraploid
+dosage (0 to 4, blank where the marker failed). Derived from Sharma et al. (2018); obtain it from
+that publication, not from this repository. Read by `src/06_sensor_and_fusion.py`.
+
+**SNP marker positions** (optional): `sharma_SNP_positions.xlsx`, sheet `annotation`.
+Columns `solcap_SNP_ID`, `chr_v403`, `position`. Needed only for LD pruning, which walks each
+chromosome in physical order, and therefore for the two fusion statistics built on the pruned
+marker set. If it is absent those three statistics are skipped; nothing is substituted for it.
+
 ## Created by the pipeline
 
 `processed/A2_clean_tex_norm.csv` (Flight 2, training) and `processed/A1_clean_tex_norm.csv` (Flight 1, test):

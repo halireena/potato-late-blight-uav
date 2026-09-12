@@ -76,3 +76,13 @@ Thumbs.db
 # ---- 8. Local handover notes (contain absolute paths to the data folder) ----
 HANDOVER.md
 HANDOVER_report.txt
+
+# ---- 9. preprocessing/ artefacts held back pending a redaction decision ----
+# These are on disk, exactly as written, but carry cluster paths, the author's
+# university username and a workspace folder named after the author. Publishing
+# them would publish those. Delete the four lines below once the strings are
+# cleared or redacted. See preprocessing/README.md.
+preprocessing/01_preprocessing.sh
+preprocessing/02_metadata.py
+preprocessing/potato_pipeline.qgz
+preprocessing/16_texture_extraction_bluebear.ipynb
