@@ -37,26 +37,18 @@ shrinking the training classes to see whether more data would have helped.
                              test-flight mean: how far the sensor moved between
                              the two dates.
 
-Two analyses from this section are NOT here
--------------------------------------------
-They are skipped rather than guessed at, and the run says so:
+Two things that are reported but NOT checked
+--------------------------------------------
+    The threshold sweeps and cost-sensitive training have no value to check
+    against. Cell 477 prints real_recall_ext = 0.52 beside recall_ext = 0.32
+    and which quantity the 0.52 is has not been established. Both sweeps are
+    run in full, every point of both curves is printed, and the maximum
+    test-flight diseased recall each reaches is reported -- and nothing is
+    asserted about any of it.
 
-    Stage B threshold sweep and cost-sensitive training (1:1 to 20:1).
-        The recorded result is that neither beats the locked test-flight
-        diseased recall of 0.320. Whether that holds depends entirely on where
-        the threshold and the cost ratio were chosen -- on the training flight,
-        on out-of-fold scores, or on the test flight itself -- and those give
-        different answers. I could not find the cell that fixes it, and a
-        reconstruction that happened to satisfy the check would be worthless.
-
-    Six moderate-class transformations, all AUCs between 0.457 and 0.542.
-        Four are traceable: raw normalised features (0.457), sigmoid-calibrated
-        (0.542), per-flight rank transform (0.494) and LDA (0.459). The other
-        two are not, and the check is on all six, so checking four would not be
-        the recorded claim.
-
-Both need one thing each: the notebook cell that defines them. Point me at
-those and they drop straight in.
+    The moderate-class transformation list has six slots and five values. The
+    sixth was never computed. Five are implemented and checked; no sixth is
+    invented to fill the slot.
 
 Every expected value here was printed by an executed cell of the thesis
 notebook (mine_ML.ipynb) and was supplied as authorised. Two findings are
@@ -75,15 +67,17 @@ import pandas as pd
 from scipy.stats import rankdata
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.impute import SimpleImputer
+from sklearn.calibration import CalibratedClassifierCV
+from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
 from sklearn.linear_model import LogisticRegression
-from sklearn.metrics import f1_score
+from sklearn.metrics import f1_score, roc_auc_score
 from sklearn.model_selection import ParameterGrid, StratifiedGroupKFold
 from sklearn.preprocessing import LabelEncoder, StandardScaler
 from sklearn.svm import SVC
 from xgboost import XGBClassifier
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from config import OUT_DIR, PROCESSED_DIR, RANDOM_SEED, require  # noqa: E402
+from config import DATA_DIR, OUT_DIR, PROCESSED_DIR, RANDOM_SEED, require  # noqa: E402
 
 warnings.filterwarnings("ignore", category=RuntimeWarning, module="sklearn")
 warnings.filterwarnings("ignore", message=".*converge.*")
@@ -99,6 +93,16 @@ ALL_INDICES = ["PVR", "canopy_cover", "NDVI", "GNDVI", "NDRE", "TCARI_OSAVI",
                "TCARI", "RDVI", "OSAVI", "EVI2", "TVI"]
 LO = ["diseased", "moderate", "healthy"]
 INNER_SEED = 1        # the nested search seeds its INNER folds 1, not RANDOM_SEED
+TEXTURE_FULL_FILE = "texture_features_percentiles.csv"
+BANDS = ["Green", "Red", "RedEdge", "NIR"]
+BAND_STATS = ["p10", "p90", "std", "min", "max"]
+GENERIC = [f"{b}_{s}" for b in BANDS for s in BAND_STATS]
+GENERIC_NORM = [c + "_norm" for c in GENERIC]
+ALL_24 = LOW_VIF + GENERIC_NORM
+# Stage B probability thresholds, exactly the two grids the notebook defines.
+THRESHOLD_RANGE = np.arange(0.20, 0.8001, 0.05)
+THRESHOLD_GRID_FINE = np.arange(0.10, 0.6251, 0.025)
+COST_RATIOS = [1, 2, 3, 5, 8, 12, 20]       # false-negative cost, false-positive fixed at 1
 
 FEATURE_SETS = {"LowVIF_4": LOW_VIF, "Baseline_6": BASE_6, "NoEVI2OSAVI_9": NINE}
 MODEL_GRIDS = {
@@ -214,14 +218,63 @@ def main():
     checks.append(("Oracle threshold ceiling, macro-F1", oracle_f1, 0.441))
 
     # =====================================================================
-    # SKIPPED: threshold sweep and cost-sensitive training
+    # 2b. Two ways of forcing more diseased predictions, neither checked
     # =====================================================================
-    why = ("the cell fixing where the threshold and the cost ratio are chosen could not be "
-           "found; on the test flight the oracle above already beats 0.320, so the recorded "
-           "claim depends on a protocol that is not written down")
-    print("\n   [SKIPPED] Stage B threshold sweep and cost-sensitive training (1:1 to 20:1)")
-    print(f"     {why}")
-    skipped.append(("Threshold sweep and cost-sensitive training", why))
+    print("\n2b. STAGE B THRESHOLD SWEEP AND COST-SENSITIVE TRAINING")
+    print("    Nothing in this section is checked against any value. See the note at the end.")
+
+    mB_prob = SVC(kernel="linear", class_weight="balanced", C=0.1,
+                  probability=True, random_state=RANDOM_SEED).fit(
+                      X2s, (y2 == "diseased").astype(int))
+    pa_ext = mA.predict(X1s)
+    pb_prob = mB_prob.predict_proba(X1s)[:, 1]
+
+    def sweep(grid, label):
+        rows = []
+        for t in grid:
+            pred = np.array(["healthy" if a == 1 else ("diseased" if pb > t else "moderate")
+                             for a, pb in zip(pa_ext, pb_prob)])
+            rows.append({"threshold": float(t),
+                         "diseased_recall": diseased_recall(y1, pred),
+                         "macro_f1": f1_score(y1, pred, average="macro", labels=LO)})
+        df = pd.DataFrame(rows)
+        print(f"\n   {label}  ({len(grid)} thresholds on Stage B's P(diseased), test flight)")
+        print(f"     {'threshold':>10s} {'diseased recall':>16s} {'macro-F1':>10s}")
+        for _, r in df.iterrows():
+            print(f"     {r['threshold']:10.3f} {r['diseased_recall']:16.3f} {r['macro_f1']:10.3f}")
+        return df
+
+    sweep_coarse = sweep(THRESHOLD_RANGE, "threshold_range, 0.20 to 0.80 step 0.05")
+    sweep_fine = sweep(THRESHOLD_GRID_FINE, "threshold_grid_fine, 0.10 to 0.625 step 0.025")
+
+    print(f"\n   Cost-sensitive training, false-negative cost 1:1 to 20:1")
+    print("     Stage B trained with per-sample weights instead of class_weight; Stage A unchanged")
+    cost_rows = []
+    for fn_cost in COST_RATIOS:
+        w = np.where(y2 == "diseased", fn_cost, 1)
+        mB_cost = SVC(kernel="linear", C=0.1).fit(
+            X2s, (y2 == "diseased").astype(int), sample_weight=w)
+        mA_cost = svc().fit(X2s, (y2 == "healthy").astype(int))
+        pred = np.array(["healthy" if a == 1 else ("diseased" if b == 1 else "moderate")
+                         for a, b in zip(mA_cost.predict(X1s), mB_cost.predict(X1s))])
+        cost_rows.append({"fn_cost": fn_cost,
+                          "diseased_recall": diseased_recall(y1, pred),
+                          "macro_f1": f1_score(y1, pred, average="macro", labels=LO)})
+    cost_df = pd.DataFrame(cost_rows)
+    print(f"     {'FN cost':>8s} {'diseased recall':>16s} {'macro-F1':>10s}")
+    for _, r in cost_df.iterrows():
+        print(f"     {int(r['fn_cost']):8d} {r['diseased_recall']:16.3f} {r['macro_f1']:10.3f}")
+
+    best_sweep = max(sweep_coarse["diseased_recall"].max(), sweep_fine["diseased_recall"].max())
+    best_cost = cost_df["diseased_recall"].max()
+    print(f"\n   MAXIMUM test-flight diseased recall reached")
+    print(f"     threshold sweeps    : {best_sweep:.3f}")
+    print(f"     cost-sensitive      : {best_cost:.3f}")
+    print(f"     locked model        : {locked_recall:.3f}")
+    print("\n   NOT CHECKED, and deliberately so. Cell 477 prints real_recall_ext = 0.52")
+    print("   next to recall_ext = 0.32, and which quantity the 0.52 belongs to has not been")
+    print("   established. Until it is, there is no value to check these curves against, so")
+    print("   the curves and their maxima are reported and nothing is asserted about them.")
 
     # =====================================================================
     # 3. Nested search over 102 combinations
@@ -262,6 +315,12 @@ def main():
     mean_outer = float(round(outer_scores.mean(), 3))
     sd_outer = float(round(outer_scores.std(ddof=1), 3))
     print(f"   outer-fold mean {mean_outer:.3f}, SD {sd_outer:.3f}  (n = 5 outer folds)")
+    print(f"\n   SEED NOTE: this reproduces ONLY with the inner folds seeded {INNER_SEED}.")
+    print(f"   The outer folds use {RANDOM_SEED}, as everything else in this repository does,")
+    print(f"   but the inner folds do not. Seeding them {RANDOM_SEED} instead changes the winning")
+    print("   configuration in four of the five outer folds and gives 0.343 +/- 0.053 rather")
+    print("   than 0.361 +/- 0.043. If the Methods section says seed 42 throughout, it is wrong")
+    print("   about this search, and the recorded numbers are the ones that need the 1.")
     checks.append(("Nested search, outer-fold mean", mean_outer, 0.361))
     checks.append(("Nested search, outer-fold SD", sd_outer, 0.043))
     checks.append(("Nested search, per-fold scores",
@@ -269,13 +328,83 @@ def main():
                    [0.320, 0.430, 0.369, 0.329, 0.358]))
 
     # =====================================================================
-    # SKIPPED: six moderate-class transformations
+    # 3b. The moderate-class transformations. FIVE, not six.
     # =====================================================================
-    why2 = ("only four of the six transformations are traceable (raw 0.457, sigmoid-calibrated "
-            "0.542, per-flight rank 0.494, LDA 0.459); the recorded check is on all six")
-    print("\n   [SKIPPED] Six moderate-class transformations")
-    print(f"     {why2}")
-    skipped.append(("Six moderate-class transformations", why2))
+    print("\n3b. MODERATE-CLASS TRANSFORMATIONS")
+    print("    The recorded list holds six slots and only five were ever computed; the sixth")
+    print("    is empty. Five are implemented and checked. No sixth is invented.")
+    texture_full = pd.read_csv(require(DATA_DIR / TEXTURE_FULL_FILE))
+    texture_full["Disease_Plot_ID"] = texture_full["Disease_Plot_ID"].astype(str)
+
+    def with_texture(A, flight):
+        cols = [f"{b}_{flight}_{st}" for b in BANDS for st in BAND_STATS]
+        t = texture_full[["Disease_Plot_ID"] + cols].copy()
+        t.columns = ["Disease_Plot_ID"] + GENERIC
+        keep = ["Disease_Plot_ID", "Disease_class"] + LOW_VIF + TEX_N
+        out = A[keep].merge(t, on="Disease_Plot_ID", how="left")
+        for c in GENERIC:
+            out[c + "_norm"] = (out[c] - out[c].mean()) / out[c].std()
+        return out
+
+    for d in (A2, A1):
+        d["Disease_Plot_ID"] = d["Disease_Plot_ID"].astype(str)
+    T2, T1 = with_texture(A2, "2"), with_texture(A1, "1")
+    ym2 = T2["Disease_class"].between(7, 9).astype(int).values     # moderate vs everything else
+    ym1 = T1["Disease_class"].between(7, 9).astype(int).values
+
+    def impute_scale(a, b, scale=True):
+        im = SimpleImputer(strategy="median")
+        a, b = im.fit_transform(a), im.transform(b)
+        if scale:
+            sc = StandardScaler()
+            a, b = sc.fit_transform(a), sc.transform(b)
+        return a, b
+
+    def balanced_logreg():
+        return LogisticRegression(class_weight="balanced", max_iter=5000)
+
+    X24_2, X24_1 = impute_scale(T2[ALL_24].values, T1[ALL_24].values)
+    auc_raw = roc_auc_score(ym1, balanced_logreg().fit(X24_2, ym2).predict_proba(X24_1)[:, 1])
+
+    lda = LinearDiscriminantAnalysis(n_components=1).fit(X24_2, ym2)
+    auc_lda = roc_auc_score(ym1, lda.transform(X24_1).ravel())
+
+    rank_cols = LOW_VIF + GENERIC
+    R2, R1 = T2.copy(), T1.copy()
+    for c in rank_cols:                       # percentile rank WITHIN each flight
+        R2[c + "_rank"] = R2[c].rank(pct=True)
+        R1[c + "_rank"] = R1[c].rank(pct=True)
+    Xr2, Xr1 = impute_scale(R2[[c + "_rank" for c in rank_cols]].values,
+                            R1[[c + "_rank" for c in rank_cols]].values, scale=False)
+    auc_rank = roc_auc_score(ym1, balanced_logreg().fit(Xr2, ym2).predict_proba(Xr1)[:, 1])
+
+    keep_mh = lambda s_: s_ == 10 or 7 <= s_ <= 9                 # noqa: E731
+    M2 = T2[T2["Disease_class"].apply(keep_mh)]
+    M1 = T1[T1["Disease_class"].apply(keep_mh)]
+    Xm2, Xm1 = impute_scale(M2[F7].values, M1[F7].values)
+    auc_mh = roc_auc_score((M1["Disease_class"] < 10).astype(int),
+                           balanced_logreg().fit(
+                               Xm2, (M2["Disease_class"] < 10).astype(int)).predict_proba(Xm1)[:, 1])
+
+    cal = CalibratedClassifierCV(balanced_logreg(), method="sigmoid", cv=5).fit(X24_2, ym2)
+    auc_cal = roc_auc_score(ym1, cal.predict_proba(X24_1)[:, 1])
+
+    five = [("raw normalised features", auc_raw, 0.457, len(ym1)),
+            ("LDA-transformed", auc_lda, 0.459, len(ym1)),
+            ("per-flight rank transform", auc_rank, 0.494, len(ym1)),
+            ("moderate vs healthy only", auc_mh, 0.527, len(ym1) - int((T1["Disease_class"] < 7).sum())),
+            ("probability calibration", auc_cal, 0.542, len(ym1))]
+    print(f"   {'transformation':30s} {'AUC':>7s}   n")
+    for name, got, _, n in five:
+        print(f"     {name:30s} {got:7.3f}   {n}")
+    for name, got, expected, _ in five:
+        checks.append((f"Moderate transformation, {name}", float(round(got, 3)), expected))
+    print("     every one of them sits within 0.05 of chance; nothing separates the middle class")
+    print("\n     The sixth slot in the recorded list was never filled, so there is no sixth")
+    print("     value and none is invented here.")
+    print("     Cell 155's sigmoid calibration at cv=3 scores 0.552, above the 0.542 top of")
+    print("     this list. It is a variant from the calibration search, not one of these five,")
+    print("     and it is not counted as a sixth transformation.")
 
     # =====================================================================
     # 4 and 5. Learning curves
