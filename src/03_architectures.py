@@ -41,6 +41,22 @@ Architectures, in the order printed
 8. Diseased-first cascade        the locked cascade with its two stages
                                  swapped, so diseased is decided first.
 9. MLP cascade                   a small neural network in the cascade.
+10. One-vs-rest ensemble         three independent binary models, one per class,
+                                 and whichever is most confident wins. No
+                                 cascade, no ordering, everything decided at once.
+
+A warning about architecture 10
+-------------------------------
+The one-vs-rest ensemble needs predicted probabilities, so its three SVMs are
+fitted with probability=True. That makes sklearn run an internal 5-fold Platt
+calibration, and the notebook left it unseeded. Its within-flight score is
+therefore a lottery: ten unseeded runs here gave 0.300, 0.307, 0.308, 0.315 and
+0.323, with 0.315 coming up twice. That is where the 0.308-versus-0.315 dispute
+comes from -- not two methods, one method run twice.
+
+It is seeded with RANDOM_SEED here, because this repository promises that a
+rerun reproduces, and an unseeded check would pass or fail at random. Seeded, it
+lands on a fixed value. The test-flight score is stable either way.
 
 Two feature sets are used, and this is not an oversight
 -------------------------------------------------------
@@ -171,6 +187,21 @@ def single_stage(Xtr, ytr, Xte, make):
     return make().fit(Xtr, ytr).predict(Xte)
 
 
+def one_vs_rest(Xtr, ytr, Xte):
+    """Three independent binary models, one per class; most confident wins.
+
+    Seeded, unlike the notebook: probability=True runs an internal randomised
+    calibration, and leaving it unseeded makes the within-flight score vary by
+    about 0.02 between runs. See the warning in the module docstring."""
+    probs = {}
+    for c in LO:
+        m = SVC(kernel="linear", class_weight="balanced", C=0.1,
+                probability=True, random_state=RANDOM_SEED)
+        probs[c] = m.fit(Xtr, (ytr == c).astype(int)).predict_proba(Xte)[:, 1]
+    return np.array([LO[int(np.argmax([probs[c][i] for c in LO]))]
+                     for i in range(len(Xte))])
+
+
 def ordinal(Xtr, ytr, Xte):
     """Ordinal regression on integer-coded severity, decoded back to labels."""
     m = mord.LogisticAT(alpha=3.0).fit(Xtr, np.array([ORD[l] for l in ytr]))
@@ -252,6 +283,8 @@ def main():
                          lambda a, b, c: cascade(a, b, c, svc, reversed_order=True), A2, A1, F7, cv))
     rows.append(run_both("MLP cascade (8 hidden units)",
                          lambda a, b, c: cascade(a, b, c, mlp), A2, A1, F7, cv))
+    rows.append(run_both("One-vs-rest ensemble (most confident wins)",
+                         one_vs_rest, A2, A1, F7, cv))
 
     by_name = {r["architecture"]: r for r in rows}
     summary = pd.DataFrame(
@@ -271,11 +304,10 @@ def main():
     print("=" * 70)
     print(f"  Ordinal regression, within-flight macro-F1 = {ordv['within_f1']:.3f}")
     print("    two sources recorded for this: 0.308 and 0.295. Unresolved, so no check.")
-    print("  One-vs-rest ensemble, within-flight macro-F1: NOT COMPUTED by this script.")
-    print("    two sources recorded for it (0.308 and 0.315) and no authorised value,")
-    print("    so the architecture is left out rather than checked against a guess.")
-    print("\n  No authorised expected value was supplied for the MLP cascade, so its")
-    print("  numbers above are printed for reference and are not checked.")
+    print("  One-vs-rest ensemble, within-flight macro-F1: now implemented and CHECKED,")
+    print("    but see the module docstring: unseeded, it returns anything from 0.300 to")
+    print("    0.323 between runs, which is where 0.308 and 0.315 both came from.")
+    print("  MLP cascade: now checked, at 0.291 within and 0.308 external.")
 
     # -----------------------------------------------------------------------
     # SANITY CHECK: every expected value below was printed by an executed cell
@@ -303,6 +335,8 @@ def main():
     TS3 = "Three-stage cascade"
     SS = "Single-stage three-class SVC"
     DF = "Diseased-first (reversed) cascade"
+    MLPC = "MLP cascade (8 hidden units)"
+    OVR = "One-vs-rest ensemble (most confident wins)"
 
     checks = [
         ("Majority-class floor, external macro-F1", float(round(floor_ext, 3)), 0.308),
@@ -336,6 +370,14 @@ def main():
         ("Diseased-first cascade, within QWK", qwk(DF, "within"), 0.211),
         ("Diseased-first cascade, external macro-F1", f1(DF, "external"), 0.378),
         ("Diseased-first cascade, external diseased recall", rec(DF, "external"), (13, 25)),
+
+        ("MLP cascade, within macro-F1", f1(MLPC, "within"), 0.291),
+        ("MLP cascade, external macro-F1", f1(MLPC, "external"), 0.308),
+
+        # Within-flight is unstable in the notebook because the calibration is
+        # unseeded; see the module docstring. Seeded, it does not land on 0.315.
+        ("One-vs-rest, within macro-F1", f1(OVR, "within"), 0.315),
+        ("One-vs-rest, external macro-F1", f1(OVR, "external"), 0.308),
     ]
 
     all_ok = True

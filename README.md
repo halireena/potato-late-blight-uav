@@ -33,6 +33,9 @@ MSc Bioinformatics thesis code, University of Birmingham Dubai. <!-- TODO: year 
 | `src/04_permutation_tests.py` | permutation tests: recomputes each headline result 1,000 times on shuffled labels to see what noise alone produces (slow, ~15 min) | `data/processed/`, `data/` | `outputs/` |
 | `src/05_supporting_statistics.py` | supporting statistics: collinearity, label reliability, spatial structure, the moderate-class screen, binary vs three-class, per-flight normalisation | `data/processed/`, `data/` | `outputs/` |
 | `src/06_sensor_and_fusion.py` | RGB versus multispectral sensors over 30 paired seeds, and whether SNP genotypes add anything to the imagery | `data/processed/`, `data/` | `outputs/` |
+| `src/07_selection_leakage_check.py` | redoes the texture feature selection without the test flight and refits the cascade (diagnostic, no checks) | `data/processed/`, `data/` | `outputs/` |
+| `src/08_remaining_permutations.py` | the rest of Supplementary Table S2: eleven further permutation tests (slow, ~70 min) | `data/processed/` | `outputs/` |
+| `src/09_ceiling_and_search.py` | how high it could have gone: threshold recalibration, the 102-combination nested search, learning curves and inter-flight drift | `data/processed/` | `outputs/` |
 
 Each script ends with a sanity check that compares its results with the values printed in the original
 analysis notebook, and exits with an error on any mismatch.
