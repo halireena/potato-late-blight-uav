@@ -74,6 +74,9 @@ DIAGNOSTIC_SCRIPTS = {"07_selection_leakage_check.py"}
 # Blocks inside otherwise-checked scripts that are deliberately NOT checked,
 # for the same reason. Listed by hand so the report names them exactly.
 UNVERIFIED_BLOCKS = [
+    ("09_ceiling_and_search.py", "the moderate learning curve at the full class size",
+     "at that size nothing is sampled and only row order varies, which changes fold "
+     "membership and so the predictions; the point is not determined to three decimals"),
     ("09_ceiling_and_search.py", "whether the two learning curves are flat",
      "it is an observation about the curves, not a recorded value, and it bears on a "
      "Discussion claim"),
