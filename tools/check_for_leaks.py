@@ -22,9 +22,12 @@ What it looks for, and why each one matters
 -------------------------------------------
   1. Data / figure / notebook files that git would upload.
      .gitignore should stop these, but a typo in .gitignore fails silently.
-  2. Data files that were EVER committed, even if deleted later.
+  2. Data files that were committed and then DELETED.
      Deleting a file does not remove it from git history; anyone can check out
-     an old commit and get it back.
+     an old commit and get it back. A file that is still tracked is NOT reported
+     here: it is in the repository on purpose, and the rules above already judge
+     it on its current contents, which is the stricter test. See
+     git_history_data_files for why that subtraction removes no coverage.
   3. Notebooks (.ipynb) with saved outputs.
      A single df.head() output cell publishes real rows of the dataset.
   4. Files over 1 MB. Code is small; big files are usually data.
@@ -48,6 +51,7 @@ import argparse
 import getpass
 import json
 import re
+import pathlib
 import shutil
 import subprocess
 import sys
@@ -154,7 +158,31 @@ def walk_files(root: Path) -> list[Path]:
     return files
 
 
+def git_tracked_files(root: Path) -> set[str]:
+    """Paths git currently tracks: the files that are in the repository on purpose."""
+    try:
+        out = subprocess.run(["git", "-C", str(root), "ls-files", "-z"],
+                             capture_output=True, check=True).stdout.decode()
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        return set()
+    return {p for p in out.split("\0") if p}
+
+
 def git_history_data_files(root: Path) -> set[str]:
+    """Data, figure and notebook files in git history that are NOT tracked any more.
+
+    The danger this rule exists for is a file that was committed and then DELETED:
+    deleting it does not remove it from history, so anyone can check out an older
+    commit and get it back. A file that is still tracked is a different situation
+    entirely -- it is in the repository deliberately, and it is already judged on
+    its current contents by the rules above, which are stricter. A tracked .csv is
+    caught by "data file would be uploaded"; a tracked notebook with saved outputs
+    is caught by "notebook contains saved outputs". So subtracting the tracked set
+    removes no coverage: it only stops this rule double-reporting files the other
+    rules have already passed or failed on their merits.
+
+    Deleted files are still reported, which is the whole point of the rule.
+    """
     try:
         out = subprocess.run(
             ["git", "-C", str(root), "log", "--all", "--pretty=format:", "--name-only"],
@@ -162,8 +190,9 @@ def git_history_data_files(root: Path) -> set[str]:
         ).stdout.decode()
     except (subprocess.CalledProcessError, FileNotFoundError):
         return set()
-    return {line for line in out.splitlines()
+    ever = {line for line in out.splitlines()
             if line and Path(line).suffix.lower() in DATA_EXT | FIGURE_EXT | {".ipynb"}}
+    return ever - git_tracked_files(root)
 
 
 # ---------------------------------------------------------------------------
@@ -341,7 +370,7 @@ def scan(files: list[Path], root: Path, terms: set[str], history: set[str]) -> l
                     findings.append(Finding("REVIEW", label, loc, snippet))
 
     for h in sorted(history):
-        findings.append(Finding("BLOCK", "data/figure/notebook file exists in git HISTORY", h,
+        findings.append(Finding("BLOCK", "data/figure/notebook file DELETED but still in git HISTORY", h,
                                  "deleting it is not enough; history must be rewritten or the repo recreated"))
     return findings
 
@@ -427,6 +456,37 @@ def self_test() -> int:
 
         found = scan(walk_files(tmp), tmp, {"Zorbatato", "DELTA"}, set())
 
+        # --- the git-history rule, both directions -------------------------
+        # A real repo is needed: one data file deleted after being committed,
+        # one notebook still tracked. The first must be reported, the second
+        # must not. Identity is passed on the command line so this does not
+        # depend on the machine's git config.
+        hist = pathlib.Path(tempfile.mkdtemp())
+        git_ok = True
+        try:
+            ident = ["-c", "user.email=t@t", "-c", "user.name=t"]
+            def git(*args):
+                subprocess.run(["git", "-C", str(hist), *args], check=True,
+                               capture_output=True)
+            git("init", "-q")
+            (hist / "kept.ipynb").write_text(json.dumps({"cells": []}))
+            (hist / "gone.csv").write_text("Disease_Plot_ID\n1\n")
+            git("add", "-A")
+            subprocess.run(["git", "-C", str(hist), *ident, "commit", "-q", "-m", "first"],
+                           check=True, capture_output=True)
+            (hist / "gone.csv").unlink()
+            git("add", "-A")
+            subprocess.run(["git", "-C", str(hist), *ident, "commit", "-q", "-m", "delete it"],
+                           check=True, capture_output=True)
+            reported = git_history_data_files(hist)
+            tracked = git_tracked_files(hist)
+        except (subprocess.CalledProcessError, FileNotFoundError, OSError):
+            git_ok = False
+            reported, tracked = set(), set()
+        finally:
+            shutil.rmtree(hist, ignore_errors=True)
+
+
         def hit(level, rule_part, where_part):
             return any(x.level == level and rule_part in x.rule and where_part in x.where for x in found)
 
@@ -459,6 +519,15 @@ def self_test() -> int:
              hit("BLOCK", "private term", "params.py:2")),
             ("non-ordinary term STILL matched case-insensitively",
              hit("BLOCK", "private term", "mixedcase.py:1")),
+
+            # (3) the git-history rule, narrowed but not weakened
+            ("git history rule ran (git available)", git_ok),
+            ("deleted-but-in-history data file STILL reported",
+             git_ok and "gone.csv" in reported),
+            ("still-tracked notebook NOT reported by the history rule",
+             git_ok and "kept.ipynb" not in reported),
+            ("still-tracked notebook IS seen as tracked",
+             git_ok and "kept.ipynb" in tracked),
         ]
         print("SELF-TEST")
         for name, ok in checks:
