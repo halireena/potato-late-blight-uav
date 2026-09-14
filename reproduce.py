@@ -101,8 +101,8 @@ UNVERIFIED_BLOCKS = [
      "separates them"),
     ("04_permutation_tests.py", "ordinal regression, within-flight permutation test",
      "two real scores are on record for it (0.295 and 0.308)"),
-    ("03_architectures.py", "MLP cascade, and the ordinal within-flight macro-F1",
-     "no authorised value was supplied for either"),
+    ("03_architectures.py", "ordinal regression, within-flight macro-F1",
+     "two values are on record for it, 0.308 and 0.295"),
 ]
 
 
