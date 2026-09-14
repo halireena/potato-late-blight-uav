@@ -55,8 +55,11 @@ therefore a lottery: ten unseeded runs here gave 0.300, 0.307, 0.308, 0.315 and
 comes from -- not two methods, one method run twice.
 
 It is seeded with RANDOM_SEED here, because this repository promises that a
-rerun reproduces, and an unseeded check would pass or fail at random. Seeded, it
-lands on a fixed value. The test-flight score is stable either way.
+rerun reproduces, and an unseeded check would pass or fail at random. Seeding
+fixes it at one value; it does not make that value the recorded one. So the
+within-flight score is REPORTED beside the notebook's 0.315 and is NOT checked:
+the recorded procedure does not determine it. The test-flight score is stable
+at 0.308 either way, and that one is checked.
 
 Two feature sets are used, and this is not an oversight
 -------------------------------------------------------
@@ -298,16 +301,35 @@ def main():
     # each of these, so there is no single value to check against. Reported as
     # unresolved in HANDOVER.md for the author to settle against the notebook.
     # -----------------------------------------------------------------------
-    ordv = by_name["Ordinal regression, mord.LogisticAT (4 low-VIF features)"]
+    LOCK = "Locked two-stage SVM cascade"
+    UNW = "Unweighted single model (6 spectral means, no texture)"
+    ORDN = "Ordinal regression, mord.LogisticAT (4 low-VIF features)"
+    RFC = "Random Forest cascade"
+    XGBC = "XGBoost cascade"
+    TS3 = "Three-stage cascade"
+    SS = "Single-stage three-class SVC"
+    DF = "Diseased-first (reversed) cascade"
+    MLPC = "MLP cascade (8 hidden units)"
+    OVR = "One-vs-rest ensemble (most confident wins)"
+
+    ordv = by_name[ORDN]
     print("\n" + "=" * 70)
     print("PRINTED BUT NOT CHECKED (the notebook disagrees with itself)")
     print("=" * 70)
     print(f"  Ordinal regression, within-flight macro-F1 = {ordv['within_f1']:.3f}")
     print("    two sources recorded for this: 0.308 and 0.295. Unresolved, so no check.")
-    print("  One-vs-rest ensemble, within-flight macro-F1: now implemented and CHECKED,")
-    print("    but see the module docstring: unseeded, it returns anything from 0.300 to")
-    print("    0.323 between runs, which is where 0.308 and 0.315 both came from.")
-    print("  MLP cascade: now checked, at 0.291 within and 0.308 external.")
+    print(f"  One-vs-rest ensemble, within-flight macro-F1")
+    print(f"    computed here     {by_name[OVR]['within_f1']:.3f}   (seeded with RANDOM_SEED)")
+    print(f"    notebook records  0.315")
+    print("    NOT CHECKED. The notebook fits these three models with probability=True and")
+    print("    leaves the internal Platt calibration unseeded, so the value is not determined")
+    print("    by the recorded procedure. Ten unseeded runs of this exact computation spanned")
+    print("    0.300 to 0.323, taking the values 0.300, 0.307, 0.308, 0.315 and 0.323, with")
+    print("    0.315 coming up twice in ten. Both numbers on record, 0.308 and 0.315, are")
+    print("    draws from that same spread. It is seeded here so this repository stays")
+    print("    deterministic, which fixes it at one value rather than making it correct.")
+    print("    The TEST-flight score is stable at 0.308 and is checked.")
+    print("\n  MLP cascade: checked, at 0.291 within and 0.308 external.")
 
     # -----------------------------------------------------------------------
     # SANITY CHECK: every expected value below was printed by an executed cell
@@ -327,16 +349,6 @@ def main():
     def rec(name, cond):
         return (by_name[name][f"{cond}_dis_recalled"], by_name[name][f"{cond}_dis_total"])
 
-    LOCK = "Locked two-stage SVM cascade"
-    UNW = "Unweighted single model (6 spectral means, no texture)"
-    ORDN = "Ordinal regression, mord.LogisticAT (4 low-VIF features)"
-    RFC = "Random Forest cascade"
-    XGBC = "XGBoost cascade"
-    TS3 = "Three-stage cascade"
-    SS = "Single-stage three-class SVC"
-    DF = "Diseased-first (reversed) cascade"
-    MLPC = "MLP cascade (8 hidden units)"
-    OVR = "One-vs-rest ensemble (most confident wins)"
 
     checks = [
         ("Majority-class floor, external macro-F1", float(round(floor_ext, 3)), 0.308),
@@ -374,9 +386,9 @@ def main():
         ("MLP cascade, within macro-F1", f1(MLPC, "within"), 0.291),
         ("MLP cascade, external macro-F1", f1(MLPC, "external"), 0.308),
 
-        # Within-flight is unstable in the notebook because the calibration is
-        # unseeded; see the module docstring. Seeded, it does not land on 0.315.
-        ("One-vs-rest, within macro-F1", f1(OVR, "within"), 0.315),
+        # One-vs-rest WITHIN-flight is NOT checked. The notebook leaves its Platt
+        # calibration unseeded, so the recorded procedure does not determine the
+        # value. Reported beside 0.315 in the printed-not-checked section instead.
         ("One-vs-rest, external macro-F1", f1(OVR, "external"), 0.308),
     ]
 

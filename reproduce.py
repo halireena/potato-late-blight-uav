@@ -83,6 +83,13 @@ UNVERIFIED_BLOCKS = [
     ("09_ceiling_and_search.py", "the two moderate-class learning curves on record",
      "0.347-to-0.369 and 0.395-to-0.440 come from different models, so neither is the "
      "value for the other"),
+    ("03_architectures.py / 08_remaining_permutations.py",
+     "one-vs-rest ensemble, within-flight macro-F1",
+     "the notebook leaves its Platt calibration unseeded, so the recorded procedure does not "
+     "determine the value; ten unseeded runs spanned 0.300 to 0.323"),
+    ("08_remaining_permutations.py", "MLP cascade, test-flight p-value",
+     "that row uses 200 shuffles, where the standard error on a p near 0.69 is about 0.033, "
+     "wider than the comparison tolerance"),
     ("08_remaining_permutations.py", "single-stage three-class within-flight, both variants",
      "Table S2 records 0.380 and 04 verifies 0.358, on different feature sets with "
      "different aggregations"),

@@ -89,7 +89,26 @@ Without the data, the scripts stop with a message explaining which file is missi
   One exception is documented in the code: the nested architecture search in
   `src/09_ceiling_and_search.py` seeds its **inner** folds `1`, because that is what the
   recorded result requires. Its outer folds use `RANDOM_SEED` like everything else.
-- **One value is deliberately reported rather than checked.** The moderate-class learning
+- **Three values are deliberately reported rather than checked.** In each case the recorded
+  procedure does not determine the number, so a check on it would test something other than the
+  result. Each is printed beside the figure the notebook recorded, with the difference and the
+  reason, and no tolerance anywhere was loosened for any of them.
+
+  - **One-vs-rest ensemble, within-flight macro-F1** (`src/03_architectures.py`,
+    `src/08_remaining_permutations.py`). The three binary models are fitted with
+    `probability=True`, which runs an internal Platt calibration that the notebook leaves
+    unseeded. The value is therefore a lottery: ten unseeded runs spanned **0.300 to 0.323**,
+    taking the values 0.300, 0.307, 0.308, 0.315 and 0.323, with 0.315 coming up twice. Both
+    figures on record, 0.308 and 0.315, are draws from that spread. It is seeded here so the
+    repository stays deterministic, which fixes the value without making it the recorded one.
+    The **test**-flight score is stable at 0.308 and is checked. In `08` the row's null mean,
+    null SD and p are all still checked.
+  - **MLP cascade, test-flight p-value** (`src/08_remaining_permutations.py`). That row uses
+    **200** shuffles rather than 1,000, and at 200 the standard error on a p near 0.69 is about
+    **0.033** — wider than the ±0.02 the comparison allows, so 200 shuffles do not determine
+    this p to two decimals. The row's real score, null mean and null SD are all still checked
+    and all match.
+  - **One value is reported rather than checked for a different reason.** The moderate-class learning
   curve's last point, at the full class size, is printed beside the notebook's figure but has
   no pass/fail check. At that size the subsample is the entire moderate class, so no sampling
   takes place and only the **row order** of those plots varies between repeats. Row order

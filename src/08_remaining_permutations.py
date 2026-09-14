@@ -40,13 +40,22 @@ p compared by value only where the recorded p is 0.05 or above, and otherwise
 required only to be below 0.05, because with 1,000 shuffles the smallest
 reachable p is 1/1001 and the exact figure wanders between runs.
 
-Two rows will not behave
-------------------------
-The one-vs-rest rows depend on probability=True, which runs an internal
-randomised calibration that the notebook left unseeded. Its within-flight score
-is a lottery across roughly 0.300 to 0.323. It is seeded here so this script is
-deterministic, which means its real score is a fixed number and not necessarily
-the one on record. See the docstring of 03_architectures.py.
+Two components are reported rather than checked
+-----------------------------------------------
+Both are quantities the recorded procedure does not determine. Everything else
+in their rows stays checked, and no tolerance is widened for either.
+
+    One-vs-rest within-flight, the REAL SCORE. The notebook fits three models
+    with probability=True and leaves the internal Platt calibration unseeded,
+    so the value is a lottery: ten unseeded runs spanned 0.300 to 0.323, and
+    both figures on record, 0.308 and 0.315, are draws from it. It is seeded
+    here so this script is deterministic, which fixes the value without making
+    it the recorded one. Its null mean, null SD and p are all still checked.
+
+    MLP test flight, the P-VALUE. That row uses 200 shuffles, not 1,000, and at
+    200 the standard error on a p near 0.69 is about 0.033 -- wider than the
+    +/-0.02 the comparison allows. Its real score, null mean and null SD are
+    all still checked, and all match.
 
 The twelfth row is disputed and is NOT checked
 ----------------------------------------------
@@ -85,6 +94,22 @@ from config import OUT_DIR, PROCESSED_DIR, RANDOM_SEED, require  # noqa: E402
 # See 04_permutation_tests.py for why this is silenced and nothing else is.
 warnings.filterwarnings("ignore", category=RuntimeWarning, module="sklearn")
 warnings.filterwarnings("ignore", message=".*converge.*")
+
+# Components of a row that are REPORTED beside their recorded value but not
+# checked, because the recorded procedure does not determine them. Everything
+# else in these rows stays checked, and no tolerance is widened anywhere.
+UNCHECKED_COMPONENTS = {
+    "One-vs-rest within": {
+        "real": ("the notebook fits three models with probability=True and leaves the "
+                 "internal Platt calibration unseeded, so this value is not determined by "
+                 "the recorded procedure; ten unseeded runs spanned 0.300 to 0.323"),
+    },
+    "MLP test": {
+        "p": ("this row uses 200 shuffles, where the standard error on a p near 0.69 is "
+              "about 0.033, wider than the +/-0.02 comparison tolerance; 200 shuffles do "
+              "not determine this p to two decimals"),
+    },
+}
 
 N_DEFAULT = 1000
 N_MLP = 200
@@ -251,21 +276,55 @@ def main():
          y2, N_DEFAULT, (0.361, 0.324, 0.022, 0.053)),
         ("MLP within", lambda l: wf_macro(l, lambda a, b, c: cascade(a, b, c, mlp)),
          y2, N_MLP, (0.291, 0.291, 0.010, 0.413)),
+        # p NOT checked: 200 shuffles cannot resolve it, see UNCHECKED_COMPONENTS
         ("MLP test", lambda l: ext_macro(l, lambda a, b, c: cascade(a, b, c, mlp)),
          y2, N_MLP, (0.308, 0.311, 0.010, 0.672)),
         ("Binary within", wf_binary, yb2, N_DEFAULT, (0.602, 0.444, 0.040, 0.001)),
         ("Binary test", ext_binary, yb2, N_DEFAULT, (0.617, 0.302, 0.192, 0.001)),
+        # real score NOT checked: unseeded Platt calibration, see UNCHECKED_COMPONENTS
         ("One-vs-rest within", lambda l: wf_macro(l, one_vs_rest), y2, N_DEFAULT,
          (0.315, 0.285, 0.001, 0.001)),
         ("One-vs-rest test", lambda l: ext_macro(l, one_vs_rest), y2, N_DEFAULT,
          (0.308, 0.308, 0.001, 0.983)),
     ]
 
+    n_mlp_note = N_MLP
     results = []
     for name, fn, labels, n_perm, expected in plan:
         r = permutation_test(name, fn, labels, n_perm)
         r["expected"] = expected
         results.append(r)
+
+    # -----------------------------------------------------------------------
+    # Components reported beside their recorded value but not checked
+    # -----------------------------------------------------------------------
+    print("\n" + "=" * 74)
+    print("REPORTED BUT NOT CHECKED")
+    print("=" * 74)
+    by_test = {r["test"]: r for r in results}
+    for test_name, comps in UNCHECKED_COMPONENTS.items():
+        r = by_test.get(test_name)
+        if r is None:
+            continue
+        er, em, es, ep = r["expected"]
+        recorded = {"real": er, "mean": em, "SD": es, "p": ep}
+        got = {"real": r["real"], "mean": r["permuted_mean"],
+               "SD": r["permuted_sd"], "p": r["p_value"]}
+        for comp, reason in comps.items():
+            print(f"\n  {test_name}, {comp}")
+            print(f"    computed here     {got[comp]:.3f}")
+            print(f"    notebook records  {recorded[comp]:.3f}")
+            print(f"    difference        {abs(got[comp] - recorded[comp]):.3f}")
+            print(f"    NOT CHECKED: {reason}.")
+            if comp == "real":
+                print("    Observed range across ten unseeded runs: 0.300, 0.307, 0.308,")
+                print("    0.315 and 0.323, with 0.315 coming up twice in ten. Both numbers")
+                print("    on record, 0.308 and 0.315, are draws from that spread.")
+            if comp == "p":
+                print(f"    Standard error at {n_mlp_note} shuffles: about 0.033, against a")
+                print(f"    comparison tolerance of {TOLERANCE}. The real score, null mean and")
+                print("    null SD for this row are all checked and all match.")
+        print(f"    Everything else in this row remains checked.")
 
     # -----------------------------------------------------------------------
     # The disputed twelfth row. Two different models; both computed, neither
@@ -341,21 +400,26 @@ def main():
     all_ok = True
     for r in results:
         er, em, es, ep = r["expected"]
+        exempt = UNCHECKED_COMPONENTS.get(r["test"], {})
         p_ok, p_text = check_p(r["p_value"], ep)
         parts = [
             ("real", float(round(r["real"], 3)), er, float(round(r["real"], 3)) == er),
             ("mean", r["permuted_mean"], em, abs(r["permuted_mean"] - em) <= TOLERANCE),
             ("SD", r["permuted_sd"], es, abs(r["permuted_sd"] - es) <= TOLERANCE),
         ]
-        ok = all(x[3] for x in parts) and p_ok
+        checked = [x for x in parts if x[0] not in exempt]
+        p_counts = "p" not in exempt
+        ok = all(x[3] for x in checked) and (p_ok or not p_counts)
         all_ok &= ok
-        print(f"  [{'OK' if ok else 'MISMATCH'}] {r['test']:26s} "
-              + "  ".join(f"{n}={v:.3f}/{e:.3f}" for n, v, e, _ in parts) + "  " + p_text)
+        shown = "  ".join(f"{n}={v:.3f}/{e:.3f}" + ("" if n not in exempt else " [reported]")
+                          for n, v, e, _ in parts)
+        print(f"  [{'OK' if ok else 'MISMATCH'}] {r['test']:26s} " + shown + "  "
+              + (p_text if p_counts else f"p={r['p_value']:.3f}/{ep:.3f} [reported]"))
         if not ok:
-            for n, v, e, good in parts:
+            for n, v, e, good in checked:
                 if not good:
                     print(f"             {n}: got {v:.4f}, expected {e:.4f}")
-            if not p_ok:
+            if p_counts and not p_ok:
                 print(f"             p: got {r['p_value']:.4f}, recorded {ep:.4f}")
     print("\nAll matched." if all_ok
           else "\nMISMATCH found. Do not trust any number above until it is explained.")
